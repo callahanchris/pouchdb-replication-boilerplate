@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>test</title>
+    <script src="http://cdn.jsdelivr.net/pouchdb/4.0.0/pouchdb.min.js"></script>
+  </head>
+  <body>
+    <h3>Last Saved Text:</h3>
+    <p></p>
+    <form>
+      <input>
+      <br />
+      <input type='submit'></button>
+    </form>
+  </body>
+  <script>
+    var localDB = new PouchDB('text', { auto_compaction: true });
+    var remoteDB = new PouchDB('http://localhost:5984/text');
+
+    var input = document.getElementsByTagName('input')[0];
+    var submit = document.getElementsByTagName('input')[1];
+    var p = document.getElementsByTagName('p')[0];
+
+    submit.onclick = function(e) {
+      e.preventDefault();
+      if (input.value) {
+        localDB.get('mydoc').then(function(doc) {
+          return localDB.put({
+            _id: 'mydoc',
+            _rev: doc._rev,
+            value: input.value
+          });
+        }).then(function(response) {
+          console.log('success', response);
+          input.value = '';
+        }).catch(function(err) {
+          console.error('error', err);
+        });
+      }
+    };
+
+    localDB.get('mydoc').then(function(doc) {
+      console.log('mydoc exists');
+      p.textContent = doc.value;
+    }, function(err) {
+      console.log('mydoc does not exist');
+      localDB.put({
+        _id: 'mydoc',
+        value: 'hello world'
+      }).then(function(response) {
+        console.log('inital PUT success', response);
+        localDB.get('mydoc').then(function(doc) {
+          p.textContent = doc.value;
+        });
+      }).catch(function(err) {
+        console.error('initial PUT error', err);
+      });
+    })
+
+    localDB.changes({
+      since: 'now',
+      live: true,
+      include_docs: true,
+      conflicts: true,
+      filter: function(doc) {
+        return doc._id === 'mydoc';
+      }
+    }).on('change', function(change) {
+      console.log('local change', change);
+      p.textContent = change.doc.value;
+    }).on('error', function(err) {
+      console.error('change feed error', err);
+    });
+
+
+    localDB.replicate.from(remoteDB, {
+      live: true,
+      retry: true,
+      filter: 'text/byId',
+      query_params: { id: 'mydoc' }
+    }).on('change', function(info) {
+      console.log('couch to pouch replication change', info);
+    }).on('paused', function() {
+      console.log('couch to pouch replication paused');
+    }).on('active', function() {
+      console.log('couch to pouch replication active');
+    }).on('denied', function(info) {
+      console.log('couch to pouch replication denied', info);
+    }).on('complete', function(info) {
+      console.log('couch to pouch replication complete', info);
+    }).on('error', function(err) {
+      console.error('couch to pouch replication error', err);
+    });
+
+    localDB.replicate.to(remoteDB, {
+      live: true,
+      retry: true
+    }).on('change', function(info) {
+      console.log('pouch to couch replication change', info);
+    }).on('paused', function() {
+      console.log('pouch to couch replication paused');
+    }).on('active', function() {
+      console.log('pouch to couch replication active');
+    }).on('denied', function(info) {
+      console.log('pouch to couch replication denied', info);
+    }).on('complete', function(info) {
+      console.log('pouch to couch replication complete', info);
+    }).on('error', function(err) {
+      console.error('pouch to couch replication error', err);
+    });
+  </script>
+</html>

@@ -1,0 +1,7 @@
+{
+  "_id": "_design/text",
+  "filters": {
+    "byId": "function (doc, req) { return doc._id === req.query.id }"
+  },
+  "language": "javascript"
+}
